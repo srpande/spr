@@ -564,12 +564,25 @@ func (c *client) CommentPullRequest(ctx context.Context, pr *github.PullRequest,
 	}
 }
 
+func stripCommitID(body string) string {
+	var lines []string
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "commit-id:") {
+			lines = append(lines, line)
+		}
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
 func (c *client) MergePullRequest(ctx context.Context,
 	pr *github.PullRequest, mergeMethod genclient.PullRequestMergeMethod) {
 	log.Debug().
 		Interface("PR", pr).
 		Str("mergeMethod", string(mergeMethod)).
 		Msg("MergePullRequest")
+
+	cleanBody := stripCommitID(pr.Commit.Body)
+	headline := pr.Commit.Subject
 
 	var err error
 	if c.config.Repo.MergeQueue {
@@ -579,8 +592,10 @@ func (c *client) MergePullRequest(ctx context.Context,
 		})
 	} else {
 		_, err = c.api.MergePullRequest(ctx, genclient.MergePullRequestInput{
-			PullRequestId: pr.ID,
-			MergeMethod:   &mergeMethod,
+			PullRequestId:  pr.ID,
+			MergeMethod:    &mergeMethod,
+			CommitHeadline: &headline,
+			CommitBody:     &cleanBody,
 		})
 	}
 	if err != nil {
