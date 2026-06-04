@@ -24,7 +24,13 @@ func GetLocalBranchName(gitcmd GitInterface) string {
 	panic("cannot determine local git branch name")
 }
 
-func BranchNameFromCommit(cfg *config.Config, commit Commit) string {
+func BranchNameFromCommit(cfg *config.Config, gitcmd GitInterface, commit Commit) string {
+	if cfg.User.UseLocalBranchName {
+		stack := GetLocalCommitStack(cfg, gitcmd)
+		if len(stack) == 1 {
+			return GetLocalBranchName(gitcmd)
+		}
+	}
 	remoteBranchName := cfg.Repo.GitHubBranch
 	branchPrefix := cfg.User.BranchPrefix
 	return branchPrefix + "/" + remoteBranchName + "/" + commit.CommitID

@@ -78,7 +78,7 @@ func TestBranchNameFromCommit(t *testing.T) {
 			cfg.Repo.GitHubBranch = tc.branch
 
 			commit := Commit{CommitID: tc.commitID}
-			result := BranchNameFromCommit(cfg, commit)
+			result := BranchNameFromCommit(cfg, nil, commit)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
