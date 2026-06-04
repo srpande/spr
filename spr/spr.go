@@ -413,7 +413,38 @@ func (sd *stackediff) UpdatePullRequests(ctx context.Context, reviewers []string
 
 	sd.profiletimer.Step("UpdatePullRequests::commitUpdateQueue")
 
-	sd.StatusPullRequests(ctx)
+	// Re-fetch when possible; fall back to PRs created/updated in this run.
+	githubInfo.PullRequests = sortPullRequestsByLocalCommitOrder(
+		sd.refreshPullRequestStack(ctx, githubInfo.PullRequests), localCommits)
+	sd.printPullRequestStatus(githubInfo)
+}
+
+func (sd *stackediff) refreshPullRequestStack(ctx context.Context,
+	known []*github.PullRequest) []*github.PullRequest {
+	fresh := sd.github.GetInfo(ctx, sd.gitcmd).PullRequests
+	if len(fresh) > 0 {
+		return fresh
+	}
+	return known
+}
+
+func (sd *stackediff) printPullRequestStatus(githubInfo *github.GitHubInfo) {
+	if sd.TextEnabled {
+		for i := len(githubInfo.PullRequests) - 1; i >= 0; i-- {
+			pr := githubInfo.PullRequests[i]
+			fmt.Fprintf(sd.output, "%s\n", pr.TextString(sd.config))
+		}
+	} else if len(githubInfo.PullRequests) == 0 {
+		fmt.Fprintf(sd.output, "pull request stack is empty\n")
+	} else {
+		if sd.DetailEnabled {
+			fmt.Fprint(sd.output, header(sd.config))
+		}
+		for i := len(githubInfo.PullRequests) - 1; i >= 0; i-- {
+			pr := githubInfo.PullRequests[i]
+			fmt.Fprintf(sd.output, "%s\n", pr.String(sd.config))
+		}
+	}
 }
 
 // MergePullRequests will go through all the current pull requests
@@ -518,23 +549,7 @@ func (sd *stackediff) MergePullRequests(ctx context.Context, count *uint) {
 func (sd *stackediff) StatusPullRequests(ctx context.Context) {
 	sd.profiletimer.Step("StatusPullRequests::Start")
 	githubInfo := sd.github.GetInfo(ctx, sd.gitcmd)
-
-	if sd.TextEnabled {
-		for i := len(githubInfo.PullRequests) - 1; i >= 0; i-- {
-			pr := githubInfo.PullRequests[i]
-			fmt.Fprintf(sd.output, "%s\n", pr.TextString(sd.config))
-		}
-	} else if len(githubInfo.PullRequests) == 0 {
-		fmt.Fprintf(sd.output, "pull request stack is empty\n")
-	} else {
-		if sd.DetailEnabled {
-			fmt.Fprint(sd.output, header(sd.config))
-		}
-		for i := len(githubInfo.PullRequests) - 1; i >= 0; i-- {
-			pr := githubInfo.PullRequests[i]
-			fmt.Fprintf(sd.output, "%s\n", pr.String(sd.config))
-		}
-	}
+	sd.printPullRequestStatus(githubInfo)
 	sd.profiletimer.Step("StatusPullRequests::End")
 }
 
@@ -714,7 +729,7 @@ func (sd *stackediff) syncCommitStackToGitHub(ctx context.Context,
 
 	var refNames []string
 	for _, commit := range updatedCommits {
-		branchName := git.BranchNameFromCommit(sd.config, commit)
+		branchName := git.BranchNameFromCommit(sd.config, sd.gitcmd, commit)
 		refNames = append(refNames,
 			commit.CommitHash+":refs/heads/"+branchName)
 	}

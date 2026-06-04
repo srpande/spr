@@ -42,6 +42,7 @@ type RepoConfig struct {
 
 	ShowPrTitlesInStack    bool `default:"false" yaml:"showPrTitlesInStack"`
 	BranchPushIndividually bool `default:"false" yaml:"branchPushIndividually"`
+	UseLocalBranchName     bool `default:"false" yaml:"useLocalBranchName"`
 }
 
 type UserConfig struct {
@@ -59,6 +60,14 @@ type UserConfig struct {
 	ShortPRLink          bool `default:"false" yaml:"shortPRLink"`
 	ShowCommitID         bool `default:"false" yaml:"showCommitID"`
 	BranchPrefix         string `default:"spr" yaml:"branchPrefix"`
+	// UseLocalBranchName pushes a single-commit stack to the current local
+	// branch name (e.g. sirish/mreg_gt_255) instead of spr/<base>/<commit-id>.
+	UseLocalBranchName bool `default:"false" yaml:"useLocalBranchName"`
+}
+
+// UseLocalBranchName reports whether to push the top commit to the local branch.
+func UseLocalBranchName(c *Config) bool {
+	return c.User.UseLocalBranchName || c.Repo.UseLocalBranchName
 }
 
 type InternalState struct {

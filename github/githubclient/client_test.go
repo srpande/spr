@@ -521,9 +521,11 @@ func TestMatchPullRequestStack(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		repoConfig := &config.RepoConfig{}
+		cfg := config.EmptyConfig()
+		cfg.Repo = &config.RepoConfig{}
+		cfg.User.BranchPrefix = "spr"
 		t.Run(tc.name, func(t *testing.T) {
-			actual := matchPullRequestStack(repoConfig, "spr", "master", tc.commits, tc.prs)
+			actual := matchPullRequestStack(cfg, nil, "master", "repo-id", tc.commits, tc.prs)
 			require.Equal(t, tc.expect, actual)
 		})
 	}
