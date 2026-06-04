@@ -53,9 +53,6 @@ func (c *gqlclient) PullRequests(ctx context.Context,
 							oid
 							messageHeadline
 							messageBody
-							statusCheckRollup {
-								state
-							}
 						}
 					}
 				}
@@ -145,9 +142,6 @@ func (c *gqlclient) PullRequestsWithMergeQueue(ctx context.Context,
 							oid
 							messageHeadline
 							messageBody
-							statusCheckRollup {
-								state
-							}
 						}
 					}
 				}

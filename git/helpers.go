@@ -24,7 +24,13 @@ func GetLocalBranchName(gitcmd GitInterface) string {
 	panic("cannot determine local git branch name")
 }
 
-func BranchNameFromCommit(cfg *config.Config, commit Commit) string {
+func BranchNameFromCommit(cfg *config.Config, gitcmd GitInterface, commit Commit) string {
+	if config.UseLocalBranchName(cfg) {
+		stack := GetLocalCommitStack(cfg, gitcmd)
+		if len(stack) > 0 && stack[len(stack)-1].CommitID == commit.CommitID {
+			return GetLocalBranchName(gitcmd)
+		}
+	}
 	remoteBranchName := cfg.Repo.GitHubBranch
 	branchPrefix := cfg.User.BranchPrefix
 	return branchPrefix + "/" + remoteBranchName + "/" + commit.CommitID
@@ -32,6 +38,32 @@ func BranchNameFromCommit(cfg *config.Config, commit Commit) string {
 
 func BranchNameRegex(branchPrefix string) *regexp.Regexp {
 	return regexp.MustCompile(regexp.QuoteMeta(branchPrefix) + `/([a-zA-Z0-9_\-/\.]+)/([a-f0-9]{8})$`)
+}
+
+// NormalizeCommitID returns the 8-character SPR commit id.
+// Accepts legacy full UUID trailers (commit-id: 6ebaee73-0216-...).
+func NormalizeCommitID(id string) string {
+	id = strings.TrimSpace(strings.ToLower(id))
+	if id == "" {
+		return ""
+	}
+	if i := strings.IndexByte(id, '-'); i >= 8 {
+		return id[:8]
+	}
+	if len(id) >= 8 {
+		return id[:8]
+	}
+	return id
+}
+
+// CommitIDFromMessageBody returns the normalized commit-id trailer from a message.
+func CommitIDFromMessageBody(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "commit-id:") {
+			return NormalizeCommitID(strings.TrimPrefix(line, "commit-id:"))
+		}
+	}
+	return ""
 }
 
 // GetLocalTopCommit returns the top unmerged commit in the stack
@@ -123,7 +155,7 @@ func parseLocalCommitStack(commitLog string) ([]Commit, bool) {
 		matches = commitIDRegex.FindStringSubmatch(line)
 		if matches != nil {
 			log.Debug().Interface("matches", matches).Msg("parseLocalCommitStack :: commitIdMatch")
-			scannedCommit.CommitID = matches[1]
+			scannedCommit.CommitID = NormalizeCommitID(matches[1])
 			scannedCommit.Body = strings.TrimSpace(scannedCommit.Body)
 
 			if strings.HasPrefix(scannedCommit.Subject, "WIP") {

@@ -3,7 +3,8 @@ githubRepoName: spr
 githubHost: github.com
 githubRemote: origin
 githubBranch: master
-requireChecks: false 
+useLocalBranchName: true
+requireChecks: false
 requireApproval: false
 mergeMethod: squash
 mergeQueue: false
