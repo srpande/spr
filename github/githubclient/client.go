@@ -216,7 +216,7 @@ func (c *client) GetInfo(ctx context.Context, gitcmd git.GitInterface) *github.G
 	targetBranch := c.config.Repo.GitHubBranch
 	localCommitStack := git.GetLocalCommitStack(c.config, gitcmd)
 
-	pullRequests := matchPullRequestStack(c.config.Repo, c.config.User.BranchPrefix, targetBranch, localCommitStack, pullRequestConnection)
+	pullRequests := matchPullRequestStack(c.config, gitcmd, targetBranch, localCommitStack, pullRequestConnection)
 
 	// When RequiredChecks is explicitly configured, fetch individual check contexts
 	// and only evaluate the listed checks. This allows non-required check failures
@@ -253,14 +253,20 @@ func (c *client) GetInfo(ctx context.Context, gitcmd git.GitInterface) *github.G
 }
 
 func matchPullRequestStack(
-	repoConfig *config.RepoConfig,
-	branchPrefix string,
+	cfg *config.Config,
+	gitcmd git.GitInterface,
 	targetBranch string,
 	localCommitStack []git.Commit,
 	allPullRequests fezzik_types.PullRequestConnection) []*github.PullRequest {
+	branchPrefix := cfg.User.BranchPrefix
 
 	if len(localCommitStack) == 0 || allPullRequests.Nodes == nil {
 		return []*github.PullRequest{}
+	}
+
+	localBranch := ""
+	if cfg.User.UseLocalBranchName && len(localCommitStack) == 1 {
+		localBranch = git.GetLocalBranchName(gitcmd)
 	}
 
 	// pullRequestMap is a map from commit-id to pull request
@@ -268,15 +274,13 @@ func matchPullRequestStack(
 	for _, node := range *allPullRequests.Nodes {
 		var commits []git.Commit
 		for _, v := range *node.Commits.Nodes {
-			for _, line := range strings.Split(v.Commit.MessageBody, "\n") {
-				if strings.HasPrefix(line, "commit-id:") {
-					commits = append(commits, git.Commit{
-						CommitID:   strings.Split(line, ":")[1],
-						CommitHash: v.Commit.Oid,
-						Subject:    v.Commit.MessageHeadline,
-						Body:       v.Commit.MessageBody,
-					})
-				}
+			if id := git.CommitIDFromMessageBody(v.Commit.MessageBody); id != "" {
+				commits = append(commits, git.Commit{
+					CommitID:   id,
+					CommitHash: v.Commit.Oid,
+					Subject:    v.Commit.MessageHeadline,
+					Body:       v.Commit.MessageBody,
+				})
 			}
 		}
 
@@ -291,27 +295,29 @@ func matchPullRequestStack(
 			InQueue:    node.MergeQueueEntry != nil,
 		}
 
+		var commitID string
 		matches := git.BranchNameRegex(branchPrefix).FindStringSubmatch(node.HeadRefName)
 		if matches != nil {
+			commitID = matches[2]
+		} else if localBranch != "" && node.HeadRefName == localBranch &&
+			node.Commits.Nodes != nil && len(*node.Commits.Nodes) > 0 {
+			lastCommit := (*node.Commits.Nodes)[len(*node.Commits.Nodes)-1].Commit
+			commitID = git.CommitIDFromMessageBody(lastCommit.MessageBody)
+			// Link to the local stack even if GitHub's commit message lacks commit-id.
+			if commitID == "" && len(localCommitStack) == 1 {
+				commitID = localCommitStack[0].CommitID
+			}
+		}
+		if commitID != "" {
 			commit := (*node.Commits.Nodes)[len(*node.Commits.Nodes)-1].Commit
 			pullRequest.Commit = git.Commit{
-				CommitID:   matches[2],
+				CommitID:   commitID,
 				CommitHash: commit.Oid,
 				Subject:    commit.MessageHeadline,
 				Body:       commit.MessageBody,
 			}
 
 			checkStatus := github.CheckStatusPass
-			if commit.StatusCheckRollup != nil {
-				switch commit.StatusCheckRollup.State {
-				case "SUCCESS":
-					checkStatus = github.CheckStatusPass
-				case "PENDING":
-					checkStatus = github.CheckStatusPending
-				default:
-					checkStatus = github.CheckStatusFail
-				}
-			}
 
 			pullRequest.MergeStatus = github.PullRequestMergeStatus{
 				ChecksPass:     checkStatus,
@@ -414,9 +420,9 @@ func (c *client) CreatePullRequest(ctx context.Context, gitcmd git.GitInterface,
 
 	baseRefName := c.config.Repo.GitHubBranch
 	if prevCommit != nil {
-		baseRefName = git.BranchNameFromCommit(c.config, *prevCommit)
+		baseRefName = git.BranchNameFromCommit(c.config, gitcmd, *prevCommit)
 	}
-	headRefName := git.BranchNameFromCommit(c.config, commit)
+	headRefName := git.BranchNameFromCommit(c.config, gitcmd, commit)
 
 	log.Debug().Interface("Commit", commit).
 		Str("FromBranch", headRefName).Str("ToBranch", baseRefName).
@@ -433,7 +439,17 @@ func (c *client) CreatePullRequest(ctx context.Context, gitcmd git.GitInterface,
 		Body:         &body,
 		Draft:        &c.config.User.CreateDraftPRs,
 	})
-	check(err)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			if pr := c.findPullRequestByHeadRef(ctx, headRefName, baseRefName, commit); pr != nil {
+				if c.config.User.LogGitHubCalls {
+					fmt.Printf("> github found existing %d : %s\n", pr.Number, pr.Title)
+				}
+				return pr
+			}
+		}
+		check(err)
+	}
 
 	pr := &github.PullRequest{
 		ID:         resp.CreatePullRequest.PullRequest.Id,
@@ -458,13 +474,54 @@ func (c *client) CreatePullRequest(ctx context.Context, gitcmd git.GitInterface,
 	return pr
 }
 
+func (c *client) findPullRequestByHeadRef(ctx context.Context, headRefName, baseRefName string,
+	commit git.Commit) *github.PullRequest {
+	resp, err := c.api.PullRequests(ctx,
+		c.config.Repo.GitHubRepoOwner,
+		c.config.Repo.GitHubRepoName)
+	if err != nil {
+		return nil
+	}
+	if resp.Viewer.PullRequests.Nodes == nil {
+		return nil
+	}
+	for _, node := range *resp.Viewer.PullRequests.Nodes {
+		if node.HeadRefName != headRefName || node.BaseRefName != baseRefName {
+			continue
+		}
+		pr := &github.PullRequest{
+			ID:         node.Id,
+			Number:     node.Number,
+			Title:      node.Title,
+			Body:       node.Body,
+			FromBranch: node.HeadRefName,
+			ToBranch:   node.BaseRefName,
+			Commit:     commit,
+			MergeStatus: github.PullRequestMergeStatus{
+				ChecksPass:     github.CheckStatusUnknown,
+				ReviewApproved: node.ReviewDecision != nil && *node.ReviewDecision == "APPROVED",
+				NoConflicts:    node.Mergeable == "MERGEABLE",
+			},
+		}
+		if node.Commits.Nodes != nil && len(*node.Commits.Nodes) > 0 {
+			last := (*node.Commits.Nodes)[len(*node.Commits.Nodes)-1].Commit
+			pr.Commit.CommitHash = last.Oid
+			if id := git.CommitIDFromMessageBody(last.MessageBody); id != "" {
+				pr.Commit.CommitID = id
+			}
+		}
+		return pr
+	}
+	return nil
+}
+
 func (c *client) UpdatePullRequest(ctx context.Context, gitcmd git.GitInterface,
 	info *github.GitHubInfo, pullRequests []*github.PullRequest, pr *github.PullRequest,
 	commit git.Commit, prevCommit *git.Commit) {
 
 	baseRefName := c.config.Repo.GitHubBranch
 	if prevCommit != nil {
-		baseRefName = git.BranchNameFromCommit(c.config, *prevCommit)
+		baseRefName = git.BranchNameFromCommit(c.config, gitcmd, *prevCommit)
 	}
 
 	log.Debug().Interface("Commit", commit).

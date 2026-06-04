@@ -1,7 +1,8 @@
 githubRepoOwner: srpande
-githubRepoName: spr
+githubRepoName: sirish
 githubHost: github.com
 githubRemote: origin
+useLocalBranchName: true
 githubBranch: master
 requireChecks: false 
 requireApproval: false
