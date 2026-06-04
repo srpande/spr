@@ -714,7 +714,7 @@ func (sd *stackediff) syncCommitStackToGitHub(ctx context.Context,
 
 	var refNames []string
 	for _, commit := range updatedCommits {
-		branchName := git.BranchNameFromCommit(sd.config, commit)
+		branchName := git.BranchNameFromCommit(sd.config, sd.gitcmd, commit)
 		refNames = append(refNames,
 			commit.CommitHash+":refs/heads/"+branchName)
 	}

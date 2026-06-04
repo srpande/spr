@@ -61,12 +61,7 @@ type PullRequestsViewerPullRequestsNodesCommitsNodes []*struct {
 }
 
 type PullRequestsViewerPullRequestsNodesCommitsNodesCommit struct {
-	Oid               string
-	MessageHeadline   string
-	MessageBody       string
-	StatusCheckRollup *PullRequestsViewerPullRequestsNodesCommitsNodesCommitStatusCheckRollup
-}
-
-type PullRequestsViewerPullRequestsNodesCommitsNodesCommitStatusCheckRollup struct {
-	State StatusState
+	Oid             string
+	MessageHeadline string
+	MessageBody     string
 }
