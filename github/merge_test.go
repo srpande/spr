@@ -55,16 +55,18 @@ func TestMergeCommitHeadline(t *testing.T) {
 func TestMergeCommitBody(t *testing.T) {
 	assert := require.New(t)
 
-	shortPR := &PullRequest{
+	pr := &PullRequest{
 		Number: 6634,
 		Title:  "[NFC][GFX13] Remove unused decodeOperand_IDX_REG",
 	}
-	assert.Equal("commit body", MergeCommitBody(shortPR, "commit body"))
+	assert.Equal("commit body", MergeCommitBody(pr, "commit body"))
+	assert.Equal("", MergeCommitBody(pr, ""))
+	assert.Equal("", MergeCommitBody(pr, "\n\n"))
 
 	longPR := &PullRequest{
 		Number: 6511,
 		Title:  "[NFC][GFX13] Change the SubtargetPredicate from isGFX13Plus to HasVGPRIndexingRegisters",
 	}
-	headline := MergeCommitHeadline(longPR)
-	assert.Equal(headline+"\n\ncommit body", MergeCommitBody(longPR, "commit body"))
+	assert.Equal("commit body", MergeCommitBody(longPR, "commit body"))
+	assert.Equal("", MergeCommitBody(longPR, ""))
 }

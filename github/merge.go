@@ -4,12 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 )
-
-// SquashMergeHeadlineLimit is GitHub's approximate squash-merge subject limit.
-// spr does not truncate locally; longer headlines are passed through as-is.
-const SquashMergeHeadlineLimit = 72
 
 var prNumberSuffixRE = regexp.MustCompile(`\s*\(#\d+\)$`)
 
@@ -22,19 +17,11 @@ func MergeCommitHeadline(pr *PullRequest) string {
 	return title + fmt.Sprintf(" (#%d)", pr.Number)
 }
 
-// MergeCommitBody returns the squash-merge commit body. When the headline exceeds
-// GitHub's limit, the full headline is duplicated at the top of the body so no
-// text is lost if GitHub truncates the subject line.
-func MergeCommitBody(pr *PullRequest, body string) string {
-	body = strings.TrimLeft(body, "\n")
-	headline := MergeCommitHeadline(pr)
-	if utf8.RuneCountInString(headline) <= SquashMergeHeadlineLimit {
-		return body
-	}
-	if body == "" {
-		return headline
-	}
-	return headline + "\n\n" + body
+// MergeCommitBody returns the squash-merge commit body. The full PR title is
+// already in the merge commit subject via MergeCommitHeadline; the body should
+// only contain the original commit body (e.g. PR description details).
+func MergeCommitBody(_ *PullRequest, body string) string {
+	return strings.TrimLeft(body, "\n")
 }
 
 func mergeCommitTitle(pr *PullRequest) string {
