@@ -663,7 +663,7 @@ func (c *client) MergePullRequest(ctx context.Context,
 		Msg("MergePullRequest")
 
 	cleanBody := stripCommitID(pr.Commit.Body)
-	headline := pr.Commit.Subject
+	headline := github.MergeCommitHeadline(pr)
 
 	var err error
 	if c.config.Repo.MergeQueue {
