@@ -662,7 +662,7 @@ func (c *client) MergePullRequest(ctx context.Context,
 		Str("mergeMethod", string(mergeMethod)).
 		Msg("MergePullRequest")
 
-	cleanBody := stripCommitID(pr.Commit.Body)
+	cleanBody := github.MergeCommitBody(pr, stripCommitID(pr.Commit.Body))
 	headline := github.MergeCommitHeadline(pr)
 
 	var err error
