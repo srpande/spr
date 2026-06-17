@@ -8,4 +8,7 @@ requireChecks: false
 requireApproval: false
 mergeMethod: squash
 mergeQueue: false
+prTemplateType: stack
 forceFetchTags: false
+showPrTitlesInStack: false
+branchPushIndividually: false
