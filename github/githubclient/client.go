@@ -280,6 +280,8 @@ func matchPullRequestStack(
 	localBranch := ""
 	if config.UseLocalBranchName(cfg) {
 		localBranch = git.GetLocalBranchName(gitcmd)
+		// When using local branch name, use it as the prefix for matching
+		branchPrefix = localBranch
 	}
 
 	// pullRequestMap is a map from commit-id to pull request
