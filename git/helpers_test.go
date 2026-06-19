@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ejoffe/spr/config"
@@ -49,11 +50,13 @@ func TestBranchNameRegexNoMatch(t *testing.T) {
 
 func TestBranchNameFromCommit(t *testing.T) {
 	tests := []struct {
-		name     string
-		prefix   string
-		branch   string
-		commitID string
-		expected string
+		name            string
+		prefix          string
+		branch          string
+		commitID        string
+		useLocalBranch  bool
+		localBranchName string
+		expected        string
 	}{
 		{
 			name:     "default prefix",
@@ -69,6 +72,24 @@ func TestBranchNameFromCommit(t *testing.T) {
 			commitID: "abcd1234",
 			expected: "my-team/develop/abcd1234",
 		},
+		{
+			name:            "useLocalBranchName enabled",
+			prefix:          "spr",
+			branch:          "master",
+			commitID:        "abcd1234",
+			useLocalBranch:  true,
+			localBranchName: "my_feature",
+			expected:        "my_feature/master/abcd1234",
+		},
+		{
+			name:            "useLocalBranchName with custom branch",
+			prefix:          "spr",
+			branch:          "develop",
+			commitID:        "deadbeef",
+			useLocalBranch:  true,
+			localBranchName: "sirish/my_feature",
+			expected:        "sirish/my_feature/develop/deadbeef",
+		},
 	}
 
 	for _, tc := range tests {
@@ -76,10 +97,43 @@ func TestBranchNameFromCommit(t *testing.T) {
 			cfg := config.EmptyConfig()
 			cfg.User.BranchPrefix = tc.prefix
 			cfg.Repo.GitHubBranch = tc.branch
+			cfg.Repo.UseLocalBranchName = tc.useLocalBranch
+
+			var gitcmd GitInterface
+			if tc.useLocalBranch {
+				gitcmd = &mockGitCmd{localBranch: tc.localBranchName}
+			}
 
 			commit := Commit{CommitID: tc.commitID}
-			result := BranchNameFromCommit(cfg, nil, commit)
+			result := BranchNameFromCommit(cfg, gitcmd, commit)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+type mockGitCmd struct {
+	localBranch string
+}
+
+func (m *mockGitCmd) Git(cmdStr string, output *string) error {
+	if output != nil && cmdStr == "branch --no-color" {
+		*output = "* " + m.localBranch + "\n"
+	}
+	return nil
+}
+
+func (m *mockGitCmd) MustGit(cmdStr string, output *string) {
+	m.Git(cmdStr, output)
+}
+
+func (m *mockGitCmd) GitWithEditor(cmdStr string, output *string, editorCmd string) error {
+	return nil
+}
+
+func (m *mockGitCmd) RootDir() string {
+	return "/tmp"
+}
+
+func (m *mockGitCmd) DeleteRemoteBranch(ctx context.Context, branch string) error {
+	return nil
 }
