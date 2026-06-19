@@ -3,12 +3,14 @@ githubRepoName: spr
 githubHost: github.com
 githubRemote: origin
 githubBranch: master
-useLocalBranchName: true
 requireChecks: false
+requiredChecks: []
 requireApproval: false
+defaultReviewers: []
 mergeMethod: squash
 mergeQueue: false
 prTemplateType: stack
 forceFetchTags: false
 showPrTitlesInStack: false
 branchPushIndividually: false
+useLocalBranchName: true
